@@ -1,36 +1,65 @@
-import numpy as np
 from stl import mesh
-from mpl_toolkits import mplot3d
-import scipy.spatial.distance
-import matplotlib.cm as cm
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import math
-import pickle
 import time
-import multiprocessing
-import Worker
-from ToolBox import ToolBox
+import ToolBox
+from tasks import *
+from celery import chord
+from celery import group
+from celery import chain
 
-name = 'Coffee_cup'
+name = 'cube'
 model = mesh.Mesh.from_file(name + '.stl')
 
 figureno = 1
 
 #shape
-figure = plt.figure(figureno)
-axes = mplot3d.Axes3D(figure)
-axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors))
-scale = model.points.flatten(-1)
-axesLimits = [np.min(scale),np.max(scale)]
-axes.set_xlim([axesLimits[0],axesLimits[1]])
-axes.set_ylim([axesLimits[0],axesLimits[1]])
-axes.set_zlim([axesLimits[0],axesLimits[1]])
-#axes.auto_scale_xyz(scale, scale, scale)
-#plt.show()
+# figure = plt.figure(figureno)
+# axes = mplot3d.Axes3D(figure)
+# axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors))
+# scale = model.points.flatten(-1)
+# axesLimits = [np.min(scale),np.max(scale)]
+# axes.set_xlim([axesLimits[0],axesLimits[1]])
+# axes.set_ylim([axesLimits[0],axesLimits[1]])
+# axes.set_zlim([axesLimits[0],axesLimits[1]])
+# axes.auto_scale_xyz(scale, scale, scale)
+# plt.show()
 
-toolbox = ToolBox(name,True)
-toolbox.angleHist()
+url = name+'.stl'
+fileName = url.split('/')[-1]
+print("Generating descriptor for usermodel: " + fileName)
+try:
+    model = mesh.Mesh.from_file(url)
+except(OSError,IOError):
+    print("31: stl file missing")
+    raise IOError
+
+#Start generating task chain
+genDescriptorChain = []
+neighbors = ToolBox.loadNeighborsGraph(url)
+if(len(model.points) != len(neighbors)):#we don't have a neighbors entry fro every point so something is wrong, let's regenreate the neighbor's graph
+    indexes = range(0,len(model.points))
+    chunks= ToolBox.chunker(indexes,1000)#break the list into 10 parts
+    genGraphWorkflow = chord((findNeighborsTask.s(model,chunk) for chunk in chunks),reducer.s())
+    genDescriptorChain.append(genGraphWorkflow)
+
+genDescriptorChain.append(saveNeighbors.s())
+
+descriptorsChain = []
+
+descriptorsChain.append(angleHistTask.s())
+genDescriptorChain.append(chord(group(*descriptorsChain),reducer.s()))#make the descriptors a group so they can be executed in parallel, then use a chord to merge them
+
+genDescriptorChain.append(printResults.s())
+generate = chain(*genDescriptorChain)
+
+start = time.time()
+result = generate.delay()
+
+while (result.ready() == False):
+    print(time.time()-start)
+    time.sleep(1)
+
+print(result.get(timeout=1))
+
 
 #point cloud
 #figureno+=1
@@ -60,12 +89,6 @@ toolbox.angleHist()
 # z = model.points[:,2]
 # axes.scatter(x,y,z,color='k',cmap=cm.gist_rainbow)
 # plt.show()
-
-
-def mag(x):
-    return math.sqrt(x[0]**2+x[1]**2+x[2]**2)
-def clean_acos(cos_angle):
-    return math.acos(min(1,max(cos_angle,-1)))
 
 # #2D based gradient orientation
 # saved_nearest_neighbors = pickle.load(open(name+'_neighbors.pkl','rb'))
@@ -181,26 +204,26 @@ def clean_acos(cos_angle):
 
 #find neighborhoods
 
-binsx = np.linspace(np.min(model.points[:,0]),np.max(model.points[:,0]),num=20)
-binsy = np.linspace(np.min(model.points[:,1]),np.max(model.points[:,1]),num=20)
-binsz = np.linspace(np.min(model.points[:,2]),np.max(model.points[:,2]),num=20)
-modelx = np.digitize(model.points[:,0], binsx)
-modely = np.digitize(model.points[:,1], binsy)
-modelz = np.digitize(model.points[:,2], binsz)
-
-griddedModel = np.vstack((np.vstack((modelx,modely)),modelz))
-
-neighborhoods = np.sum(griddedModel,0)
-print(neighborhoods.shape)
-
-
-(hist2, labels) = np.histogram(neighborhoods,bins=8000,density=True)
-neighborhoodsLabels = np.digitize(neighborhoods,labels)
-
-figureno +=1
-plt.figure(figureno)
-axes = mplot3d.Axes3D(figure)
-axes.scatter(model.points[:,0],model.points[:,1],model.points[:,2],c=neighborhoodsLabels,cmap=cm.gist_rainbow)
+# binsx = np.linspace(np.min(model.points[:,0]),np.max(model.points[:,0]),num=20)
+# binsy = np.linspace(np.min(model.points[:,1]),np.max(model.points[:,1]),num=20)
+# binsz = np.linspace(np.min(model.points[:,2]),np.max(model.points[:,2]),num=20)
+# modelx = np.digitize(model.points[:,0], binsx)
+# modely = np.digitize(model.points[:,1], binsy)
+# modelz = np.digitize(model.points[:,2], binsz)
+#
+# griddedModel = np.vstack((np.vstack((modelx,modely)),modelz))
+#
+# neighborhoods = np.sum(griddedModel,0)
+# print(neighborhoods.shape)
+#
+#
+# (hist2, labels) = np.histogram(neighborhoods,bins=8000,density=True)
+# neighborhoodsLabels = np.digitize(neighborhoods,labels)
+#
+# figureno +=1
+# plt.figure(figureno)
+# axes = mplot3d.Axes3D(figure)
+# axes.scatter(model.points[:,0],model.points[:,1],model.points[:,2],c=neighborhoodsLabels,cmap=cm.gist_rainbow)
 
 # (hist2, labels) = np.histogram(angles,bins=20,density=True)
 # #labels = np.arange(1,len(hist)+1)
@@ -285,7 +308,7 @@ axes.scatter(model.points[:,0],model.points[:,1],model.points[:,2],c=neighborhoo
 # plt.imshow(surf_dists,interpolation='nearest', cmap=cm.gist_rainbow)
 
 
-plt.show()
+# plt.show()
 
 
 # nearest_neighbors = []
