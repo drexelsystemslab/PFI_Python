@@ -31,7 +31,7 @@ def printResults(results):
     return
 
 @app.task(queue='IOQueue')
-def saveNeighbors(neighborsGraph):
-    file = open('Celery_neighbors.pkl', 'w')
+def saveNeighbors(neighborsGraph,modelID):
+    file = open(modelID+'_neighbors.pkl', 'w')
     pickle.dump(neighborsGraph,file)
     return neighborsGraph #allow pass through for next task

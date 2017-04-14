@@ -33,6 +33,7 @@ except(OSError,IOError):
     raise IOError
 
 #Start generating task chain
+id = "test"
 genDescriptorChain = []
 neighbors = ToolBox.loadNeighborsGraph(url)
 if(len(model.points) != len(neighbors)):#we don't have a neighbors entry fro every point so something is wrong, let's regenreate the neighbor's graph
@@ -41,7 +42,7 @@ if(len(model.points) != len(neighbors)):#we don't have a neighbors entry fro eve
     genGraphWorkflow = chord((findNeighborsTask.s(model,chunk) for chunk in chunks),reducer.s())
     genDescriptorChain.append(genGraphWorkflow)
 
-genDescriptorChain.append(saveNeighbors.s())
+genDescriptorChain.append(saveNeighbors.s(id))
 
 descriptorsChain = []
 
