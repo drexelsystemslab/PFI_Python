@@ -11,8 +11,8 @@ app.control.add_consumer('IOQueue', reply=True)
 app.conf.task_routes = {'tasks.saveNeighbors': {'queue': 'IOQueue'}}
 
 @app.task()
-def findNeighborsTask(model,indexes):#TODO: move out of this module
-    return ToolBox.findNeighbors(model,indexes)
+def findNeighborsTask(model):
+    return ToolBox.findNeighbors(model)
 
 @app.task()
 def reducer(lists):
@@ -29,9 +29,3 @@ def angleHistTask(neighborsGraph):
 def printResults(results):
     print(results)
     return
-
-@app.task(queue='IOQueue')
-def saveNeighbors(neighborsGraph,modelID):
-    file = open(modelID+'_neighbors.pkl', 'w')
-    pickle.dump(neighborsGraph,file)
-    return neighborsGraph #allow pass through for next task

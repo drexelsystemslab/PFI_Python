@@ -1,65 +1,91 @@
 from stl import mesh
 import time
 import ToolBox
-from tasks import *
+import tasks
 from celery import chord
 from celery import group
 from celery import chain
+import matplotlib.pyplot as plt
+import matplotlib
+import trimesh
+import numpy as np
 
-name = 'cube'
-model = mesh.Mesh.from_file(name + '.stl')
+from mpl_toolkits import mplot3d
 
-figureno = 1
-
-#shape
-# figure = plt.figure(figureno)
-# axes = mplot3d.Axes3D(figure)
-# axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors))
-# scale = model.points.flatten(-1)
-# axesLimits = [np.min(scale),np.max(scale)]
-# axes.set_xlim([axesLimits[0],axesLimits[1]])
-# axes.set_ylim([axesLimits[0],axesLimits[1]])
-# axes.set_zlim([axesLimits[0],axesLimits[1]])
-# axes.auto_scale_xyz(scale, scale, scale)
-# plt.show()
+name = 'hex2'
+#model = mesh.Mesh.from_file(name + '.stl')
+#
+# figureno = 1
+#print(len(model.vectors))
+# # shape
+# for i in range(0,len(model.vectors)):
+#     figure = plt.figure(i)
+#     axes = mplot3d.Axes3D(figure)
+#
+#     axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors[0:i], facecolors='b', linewidths=1,edgecolor='k',alpha=0.5))
+#     axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors[i:i + 1], facecolors='r', linewidths=1))
+#     scale = model.points.flatten(-1)
+#     axesLimits = [np.min(scale),np.max(scale)]
+#     axes.set_xlim([axesLimits[0],axesLimits[1]])
+#     axes.set_ylim([axesLimits[0],axesLimits[1]])
+#     axes.set_zlim([axesLimits[0],axesLimits[1]])
+#     axes.auto_scale_xyz(scale, scale, scale)
+#     #plt.savefig("bulb/bulb_"+str(i)+".jpg")
+#     plt.show()
 
 url = name+'.stl'
 fileName = url.split('/')[-1]
 print("Generating descriptor for usermodel: " + fileName)
 try:
-    model = mesh.Mesh.from_file(url)
+    model = trimesh.load_mesh(url)
 except(OSError,IOError):
     print("31: stl file missing")
     raise IOError
 
-#Start generating task chain
-id = "test"
-genDescriptorChain = []
-neighbors = ToolBox.loadNeighborsGraph(url)
-if(len(model.points) != len(neighbors)):#we don't have a neighbors entry fro every point so something is wrong, let's regenreate the neighbor's graph
-    indexes = range(0,len(model.points))
-    chunks= ToolBox.chunker(indexes,1000)#break the list into 10 parts
-    genGraphWorkflow = chord((findNeighborsTask.s(model,chunk) for chunk in chunks),reducer.s())
-    genDescriptorChain.append(genGraphWorkflow)
-
-genDescriptorChain.append(saveNeighbors.s(id))
-
-descriptorsChain = []
-
-descriptorsChain.append(angleHistTask.s())
-genDescriptorChain.append(chord(group(*descriptorsChain),reducer.s()))#make the descriptors a group so they can be executed in parallel, then use a chord to merge them
-
-genDescriptorChain.append(printResults.s())
-generate = chain(*genDescriptorChain)
 
 start = time.time()
-result = generate.delay()
+neighbors = ToolBox.findNeighbors(model)
+angleHist = np.array(ToolBox.angleHist(neighbors)['angleHist'])
+print(angleHist[:,0])
+plt.bar(angleHist[:,0],angleHist[:,1],width=9)
 
-while (result.ready() == False):
-    print(time.time()-start)
-    time.sleep(1)
+plt.show()
 
-print(result.get(timeout=1))
+#model.show()
+
+
+
+#print(np.hstack((neighbors[:,0],np.dstack((neighbors[:,1],angles))[0])))
+
+#print(pickle.load(open(name+'_neighbors.pkl','rb')))
+#Start generating task chain
+# id = "test"
+# genDescriptorChain = []
+# neighbors = ToolBox.loadNeighborsGraph(url)
+# if(len(model.points) != len(neighbors)):#we don't have a neighbors entry fro every point so something is wrong, let's regenreate the neighbor's graph
+#     indexes = range(0,len(model.points))
+#     chunks= ToolBox.chunker(indexes,1000)#break the list into 10 parts
+#     genGraphWorkflow = chord((findNeighborsTask.s(model,chunk) for chunk in chunks),reducer.s())
+#     genDescriptorChain.append(genGraphWorkflow)
+#
+# genDescriptorChain.append(saveNeighbors.s(id))
+#
+# descriptorsChain = []
+#
+# descriptorsChain.append(angleHistTask.s())
+# genDescriptorChain.append(chord(group(*descriptorsChain),reducer.s()))#make the descriptors a group so they can be executed in parallel, then use a chord to merge them
+#
+# genDescriptorChain.append(printResults.s())
+# generate = chain(*genDescriptorChain)
+#
+# start = time.time()
+# result = generate.delay()
+#
+# while (result.ready() == False):
+#     print(time.time()-start)
+#     time.sleep(1)
+#
+# print(result.get(timeout=1))
 
 
 #point cloud
