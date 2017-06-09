@@ -1,37 +1,17 @@
-from stl import mesh
+#from stl import mesh
 import time
 import ToolBox
 import tasks
-from celery import chord
-from celery import group
-from celery import chain
 import matplotlib.pyplot as plt
 import matplotlib
 import trimesh
 import numpy as np
 
+
 from mpl_toolkits import mplot3d
 
+
 name = 'hex2'
-#model = mesh.Mesh.from_file(name + '.stl')
-#
-# figureno = 1
-#print(len(model.vectors))
-# # shape
-# for i in range(0,len(model.vectors)):
-#     figure = plt.figure(i)
-#     axes = mplot3d.Axes3D(figure)
-#
-#     axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors[0:i], facecolors='b', linewidths=1,edgecolor='k',alpha=0.5))
-#     axes.add_collection3d(mplot3d.art3d.Poly3DCollection(model.vectors[i:i + 1], facecolors='r', linewidths=1))
-#     scale = model.points.flatten(-1)
-#     axesLimits = [np.min(scale),np.max(scale)]
-#     axes.set_xlim([axesLimits[0],axesLimits[1]])
-#     axes.set_ylim([axesLimits[0],axesLimits[1]])
-#     axes.set_zlim([axesLimits[0],axesLimits[1]])
-#     axes.auto_scale_xyz(scale, scale, scale)
-#     #plt.savefig("bulb/bulb_"+str(i)+".jpg")
-#     plt.show()
 
 url = name+'.stl'
 fileName = url.split('/')[-1]
@@ -42,16 +22,8 @@ except(OSError,IOError):
     print("31: stl file missing")
     raise IOError
 
-
-start = time.time()
-neighbors = ToolBox.findNeighbors(model)
-angleHist = np.array(ToolBox.angleHist(neighbors)['angleHist'])
-print(angleHist[:,0])
-plt.bar(angleHist[:,0],angleHist[:,1],width=9)
-
-plt.show()
-
-#model.show()
+groups = ToolBox.faceDetector(model)
+ToolBox.localNeighborhoods(model)
 
 
 
